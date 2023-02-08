@@ -14,3 +14,8 @@ Change root password
 ```sql
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'password';
 ```
+
+Create user root for all host
+```sql
+CREATE USER 'root'@'%' IDENTIFIED BY 'password'; GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+```

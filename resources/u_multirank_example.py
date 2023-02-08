@@ -3,10 +3,10 @@ import urllib
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from datahub_provider.entities import Dataset
+from airflow import Dataset
 from airflow.hooks.mysql_hook import MySqlHook
 from airflow.operators.python import PythonOperator
-from ms_teams_webhook_operator import MSTeamsWebhookOperator
+
 
 def on_failure(context):
 
@@ -15,22 +15,19 @@ def on_failure(context):
     task_id = context['task_instance'].task_id
     context['task_instance'].xcom_push(key=dag_id, value=True)
 
-    logs_url = "http://202.28.55.73:8080/log?dag_id={}&task_id={}&execution_date={}".format(
-         dag_id, task_id, context['ts'])
+    logs_url = "http://localhost:8080/log?dag_id={}&task_id={}&execution_date={}".format(
+        dag_id, task_id, context['ts'])
 
-    teams_notification = MSTeamsWebhookOperator(
-        task_id="msteams_notify_failure", trigger_rule="all_done",
-        message="!!! `{}` has failed on task: `{}` !!!".format(dag_id, task_id),
-        button_text="View log", button_url=logs_url,
-        theme_color="FF0000", http_conn_id='msteams_webhook_url')
-    teams_notification.execute(context)
+    print(logs_url)
+
 
 default_args = {
-    'owner': 'Kanittha',
+    'owner': 'Facgure',
     'retries': 5,
     'retry_delay': timedelta(minutes=10),
     'on_failure_callback': on_failure
 }
+
 
 def GET_UNIV_FROM_UM(ti=None):
     url = "https://www.umultirank.org/json/exploreUniFinder.json"
@@ -41,25 +38,26 @@ def GET_UNIV_FROM_UM(ti=None):
     list_id = []
     # data of university
     for i in data_uni['unis']:
-        data = {'uid':i['id'],
-                'name':i['name'],
-                'slug':i['slug'],
-                'url':i['url'],
-                'street':i['street'],
-                'city':i['city'],
-                'country':i['country'],
-                'phone':i['tele'],
-                'fax':i['fax'],
-                'postalCode':i['postalCode'],
-                'remark':i['remark'],
-                'profile':i['profile']}
+        data = {'uid': i['id'],
+                'name': i['name'],
+                'slug': i['slug'],
+                'url': i['url'],
+                'street': i['street'],
+                'city': i['city'],
+                'country': i['country'],
+                'phone': i['tele'],
+                'fax': i['fax'],
+                'postalCode': i['postalCode'],
+                'remark': i['remark'],
+                'profile': i['profile']}
         list_datauni.append(tuple(data.values()))
         list_id.append(i['id'])
 
-    ti.xcom_push(key = 'university', value = list_datauni)
-    ti.xcom_push(key = 'id',value = list_id)
+    ti.xcom_push(key='university', value=list_datauni)
+    ti.xcom_push(key='id', value=list_id)
 
-def prepare_data(dt,id,title_table,sub_table,fact_table,subject_ranking,major):
+
+def prepare_data(dt, id, title_table, sub_table, fact_table, subject_ranking, major):
     url = "https://www.umultirank.org/json/uniData.json?id="+str(id)
     request = urllib.request.urlopen(url)
     html = request.read().decode("utf8")
@@ -68,24 +66,24 @@ def prepare_data(dt,id,title_table,sub_table,fact_table,subject_ranking,major):
     for i in data_uni['institutional']['mainData']:
         # indicator
         title = [i['dimension']['id'],
-                i['dimension']['name'],
-                i['dimension']['colgroup'],
-                i['dimension']['sort']] 
+                 i['dimension']['name'],
+                 i['dimension']['colgroup'],
+                 i['dimension']['sort']]
         if title[0] != -1:
             title_table.append(title)
         # sub indicator
         for sub in i['rows']:
             sub_dic = sub.pop('indicator')
             sub_title = [sub_dic['dimension'],
-                        sub_dic['id'],
-                        sub_dic['name'],
-                        sub_dic['sort'],
-                        sub_dic['min'],
-                        sub_dic['max'],
-                        sub_dic['valueType'],
-                        sub_dic['description'],
-                        sub_dic['lowerIsBetter'],
-                        sub_dic['decimal']]
+                         sub_dic['id'],
+                         sub_dic['name'],
+                         sub_dic['sort'],
+                         sub_dic['min'],
+                         sub_dic['max'],
+                         sub_dic['valueType'],
+                         sub_dic['description'],
+                         sub_dic['lowerIsBetter'],
+                         sub_dic['decimal']]
             sub_table.append(sub_title)
             # check grade
             if sub['rankGroup']:
@@ -96,49 +94,50 @@ def prepare_data(dt,id,title_table,sub_table,fact_table,subject_ranking,major):
             fact = [id,
                     sub_title[0],
                     sub_title[1],
-                    0,              #subject_id
-                    0,              #major_id
+                    0,  # subject_id
+                    0,  # major_id
                     sub['value'],
                     grade,
                     sub['remark'],
                     sub['entity'],
                     sub['valueType'],
-                    int(dt.split('-')[0])] #year of the data
+                    int(dt.split('-')[0])]  # year of the data
             fact_table.append(fact)
-    #ranking by subject
+    # ranking by subject
     if data_uni['fields']:
         # main subject
         for i in data_uni['fields']:
             # subject and major
-            sub = [i['id'],i['name']]
-            major0 = [i['id'],int(str(i['id'])+'000000'),'faculty as a whole (' + i['name']+')']
+            sub = [i['id'], i['name']]
+            major0 = [i['id'], int(str(i['id'])+'000000'),
+                      'faculty as a whole (' + i['name']+')']
             major.append(major0)
             subject_ranking.append(sub)
             for j in i['departments'][-1]['programData']:
-                major_i = [i['id'],j['program']['id'],j['program']['name']]
+                major_i = [i['id'], j['program']['id'], j['program']['name']]
                 major.append(major_i)
-                #indicator / ranking
+                # indicator / ranking
                 for man in j['mainData']:
                     title = [man['dimension']['id'],
-                            man['dimension']['name'],
-                            man['dimension']['colgroup'],
-                            man['dimension']['sort']] 
+                             man['dimension']['name'],
+                             man['dimension']['colgroup'],
+                             man['dimension']['sort']]
                     if title[0] != -1:
                         title_table.append(title)
                         for sub in man['rows']:
                             sub_dic = sub.pop('indicator')
                             sub_title = [sub_dic['dimension'],
-                                        sub_dic['id'],
-                                        sub_dic['name'],
-                                        sub_dic['sort'],
-                                        sub_dic['min'],
-                                        sub_dic['max'],
-                                        sub_dic['valueType'],
-                                        sub_dic['description'],
-                                        sub_dic['lowerIsBetter'],
-                                        sub_dic['decimal']]
+                                         sub_dic['id'],
+                                         sub_dic['name'],
+                                         sub_dic['sort'],
+                                         sub_dic['min'],
+                                         sub_dic['max'],
+                                         sub_dic['valueType'],
+                                         sub_dic['description'],
+                                         sub_dic['lowerIsBetter'],
+                                         sub_dic['decimal']]
                             sub_table.append(sub_title)
-                            #check grade
+                            # check grade
                             if sub['rankGroup']:
                                 grade = sub['rankGroup']
                             else:
@@ -158,24 +157,24 @@ def prepare_data(dt,id,title_table,sub_table,fact_table,subject_ranking,major):
             # for each major
             for da in i['departments'][-1]['mainData']:
                 title = [da['dimension']['id'],
-                        da['dimension']['name'],
-                        da['dimension']['colgroup'],
-                        da['dimension']['sort']] 
+                         da['dimension']['name'],
+                         da['dimension']['colgroup'],
+                         da['dimension']['sort']]
                 if title[0] != -1:
-                        title_table.append(title)
+                    title_table.append(title)
                 for sub in da['rows']:
                     try:
                         sub_dic = sub.pop('indicator')
                         sub_title = [sub_dic['dimension'],
-                                    sub_dic['id'],
-                                    sub_dic['name'],
-                                    sub_dic['sort'],
-                                    sub_dic['min'],
-                                    sub_dic['max'],
-                                    sub_dic['valueType'],
-                                    sub_dic['description'],
-                                    sub_dic['lowerIsBetter'],
-                                    sub_dic['decimal']]
+                                     sub_dic['id'],
+                                     sub_dic['name'],
+                                     sub_dic['sort'],
+                                     sub_dic['min'],
+                                     sub_dic['max'],
+                                     sub_dic['valueType'],
+                                     sub_dic['description'],
+                                     sub_dic['lowerIsBetter'],
+                                     sub_dic['decimal']]
                         sub_table.append(sub_title)
                         if sub['rankGroup']:
                             grade = sub['rankGroup']
@@ -195,39 +194,44 @@ def prepare_data(dt,id,title_table,sub_table,fact_table,subject_ranking,major):
                         fact_table.append(fact)
                     except:
                         continue
-    return (title_table,sub_table,fact_table,subject_ranking,major)
-    
+    return (title_table, sub_table, fact_table, subject_ranking, major)
+
+
 def del_duplicate_list(list_i):
     new_list = []
     for x in range(len(list_i)):
         if list_i[x] not in new_list:
             new_list.append(list_i[x])
-    return new_list    
+    return new_list
+
 
 def GET_INDICATOR_FROM_UM(EXEC_DATE, ti=None):
     dt = EXEC_DATE
-    university_id = ti.xcom_pull(task_ids = 'GET_UNIV_FROM_UM', key = 'id')
+    university_id = ti.xcom_pull(task_ids='GET_UNIV_FROM_UM', key='id')
     title_table = []
     sub_table = []
     fact_table = []
-    subject_ranking = [(0,"University as a whole")]
-    major = [(0,0,"University as a whole")]
+    subject_ranking = [(0, "University as a whole")]
+    major = [(0, 0, "University as a whole")]
     for id in university_id:
         print(id)
-        title_table,sub_table,fact_table,subject_ranking,major = prepare_data(dt,id,title_table,sub_table,fact_table,subject_ranking,major)
+        title_table, sub_table, fact_table, subject_ranking, major = prepare_data(
+            dt, id, title_table, sub_table, fact_table, subject_ranking, major)
     title_table = del_duplicate_list(title_table)
     sub_table = del_duplicate_list(sub_table)
     subject_ranking = del_duplicate_list(subject_ranking)
     major = del_duplicate_list(major)
-    indicators = {"title":title_table,"sub":sub_table,"fact":fact_table,"subject":subject_ranking,"major":major}
-    ti.xcom_push(key = 'indicators', value = indicators)
+    indicators = {"title": title_table, "sub": sub_table,
+                  "fact": fact_table, "subject": subject_ranking, "major": major}
+    ti.xcom_push(key='indicators', value=indicators)
+
 
 def INSERT_UM_UNIVERSTY(ti):
     mysql_hook = MySqlHook(mysql_conn_id='U_MULTIRANK_RANKING')
     mysql_conn = mysql_hook.get_conn()
     mysql_cursor = mysql_conn.cursor()
-    Metadata = ti.xcom_pull(task_ids = 'GET_UNIV_FROM_UM', key = 'university')
-    for i in range(0,len(Metadata),1000):
+    Metadata = ti.xcom_pull(task_ids='GET_UNIV_FROM_UM', key='university')
+    for i in range(0, len(Metadata), 1000):
         query = """
             INSERT INTO UM_UNIVERSITY (
                 UID,
@@ -256,21 +260,23 @@ def INSERT_UM_UNIVERSTY(ti):
                 REMARK = VALUES(REMARK),
                 PROFILE = VALUES(PROFILE);
         """
-        mysql_cursor.executemany(query,Metadata[i:i+1000])
+        mysql_cursor.executemany(query, Metadata[i:i+1000])
         mysql_conn.commit()
+
 
 def INSERT_UM_INDICATOR(ti):
     mysql_hook = MySqlHook(mysql_conn_id='U_MULTIRANK_RANKING')
     mysql_conn = mysql_hook.get_conn()
     mysql_cursor = mysql_conn.cursor()
-    indicators = ti.xcom_pull(task_ids = 'GET_INDICATOR_FROM_UM', key = 'indicators')
-    title  = indicators['title']
+    indicators = ti.xcom_pull(
+        task_ids='GET_INDICATOR_FROM_UM', key='indicators')
+    title = indicators['title']
     sub = indicators['sub']
     subject = indicators['subject']
     major = indicators['major']
 
     # subject
-    for i in range(0,len(subject),1000):
+    for i in range(0, len(subject), 1000):
         query = """
             INSERT INTO UM_SUBJECT (
                 SUBJECT_ID,
@@ -279,11 +285,11 @@ def INSERT_UM_INDICATOR(ti):
             ON DUPLICATE KEY UPDATE
                 NAME = VALUES(NAME);
         """
-        mysql_cursor.executemany(query,subject[i:i+1000])
+        mysql_cursor.executemany(query, subject[i:i+1000])
         mysql_conn.commit()
 
     # major
-    for i in range(0,len(major),1000):
+    for i in range(0, len(major), 1000):
         query = """
             INSERT INTO UM_MAJOR (
                 SUBJECT_ID,
@@ -294,11 +300,11 @@ def INSERT_UM_INDICATOR(ti):
                 SUBJECT_ID = VALUES(SUBJECT_ID),
                 NAME = VALUES(NAME);
         """
-        mysql_cursor.executemany(query,major[i:i+1000])
+        mysql_cursor.executemany(query, major[i:i+1000])
         mysql_conn.commit()
 
     # indicator
-    for i in range(0,len(title),1000):
+    for i in range(0, len(title), 1000):
         query = """
             INSERT INTO UM_INDICATOR (
                 INID,
@@ -311,11 +317,11 @@ def INSERT_UM_INDICATOR(ti):
                 COLGROUP = VALUES(COLGROUP),
                 SORT = VALUES(SORT);
         """
-        mysql_cursor.executemany(query,title[i:i+1000])
+        mysql_cursor.executemany(query, title[i:i+1000])
         mysql_conn.commit()
 
     # sub indicator
-    for i in range(0,len(sub),1000):
+    for i in range(0, len(sub), 1000):
         query = """
         INSERT INTO UM_SUB_INDICATOR (
             INID,
@@ -340,16 +346,18 @@ def INSERT_UM_INDICATOR(ti):
             LOWER_IS_BETTER = VALUES(LOWER_IS_BETTER),
             `DECIMAL` = VALUES(`DECIMAL`);
         """
-        mysql_cursor.executemany(query,sub[i:i+1000])
+        mysql_cursor.executemany(query, sub[i:i+1000])
         mysql_conn.commit()
+
 
 def INSERT_UM_RANK(ti):
     mysql_hook = MySqlHook(mysql_conn_id='U_MULTIRANK_RANKING')
     mysql_conn = mysql_hook.get_conn()
     mysql_cursor = mysql_conn.cursor()
-    indicators = ti.xcom_pull(task_ids = 'GET_INDICATOR_FROM_UM', key = 'indicators')
+    indicators = ti.xcom_pull(
+        task_ids='GET_INDICATOR_FROM_UM', key='indicators')
     fact = indicators['fact']
-    for i in range(0,len(fact),10000):
+    for i in range(0, len(fact), 10000):
         query = """
             INSERT INTO UM_RANK (
                 UID,
@@ -371,20 +379,21 @@ def INSERT_UM_RANK(ti):
                 ENTITY = VALUES(ENTITY),
                 VALUE_TYPE = VALUES(VALUE_TYPE);
         """
-        mysql_cursor.executemany(query,fact[i:i+10000])
-        mysql_conn.commit()               
+        mysql_cursor.executemany(query, fact[i:i+10000])
+        mysql_conn.commit()
+
 
 with DAG(
     dag_id='U_MULTIRANK',
     default_args=default_args,
-    start_date=datetime(2022, 1, 1),
-    schedule_interval='0 10 1 */3 *',
+    start_date=datetime(2023, 1, 1),
+    schedule_interval=None,  # '0 10 1 */3 *'
     tags=['umultirank', 'ranking']
 ) as dag:
 
     task1 = PythonOperator(
-        task_id = 'GET_UNIV_FROM_UM',
-        python_callable = GET_UNIV_FROM_UM,
+        task_id='GET_UNIV_FROM_UM',
+        python_callable=GET_UNIV_FROM_UM,
         inlets={
             "datasets": [
                 Dataset("Website", "U-Multirank")
@@ -392,9 +401,9 @@ with DAG(
     )
 
     task2 = PythonOperator(
-        task_id = 'GET_INDICATOR_FROM_UM',
-        python_callable = GET_INDICATOR_FROM_UM,
-        op_kwargs = {'EXEC_DATE' : '{{ ds }}'},
+        task_id='GET_INDICATOR_FROM_UM',
+        python_callable=GET_INDICATOR_FROM_UM,
+        op_kwargs={'EXEC_DATE': '{{ ds }}'},
         inlets={
             "datasets": [
                 Dataset("Website", "U-Multirank")
@@ -402,8 +411,8 @@ with DAG(
     )
 
     task3 = PythonOperator(
-        task_id = 'INSERT_UM_UNIVERSTY',
-        python_callable = INSERT_UM_UNIVERSTY,
+        task_id='INSERT_UM_UNIVERSTY',
+        python_callable=INSERT_UM_UNIVERSTY,
         outlets={
             "datasets": [
                 Dataset("mysql", "U_MULTIRANK_RANKING.UM_UNIVERSITY"),
@@ -411,8 +420,8 @@ with DAG(
     )
 
     task4 = PythonOperator(
-        task_id = 'INSERT_UM_INDICATOR',
-        python_callable = INSERT_UM_INDICATOR,
+        task_id='INSERT_UM_INDICATOR',
+        python_callable=INSERT_UM_INDICATOR,
         outlets={
             "datasets": [
                 Dataset("mysql", "U_MULTIRANK_RANKING.UM_MAJOR"),
@@ -423,8 +432,8 @@ with DAG(
     )
 
     task5 = PythonOperator(
-        task_id = 'INSERT_UM_RANK',
-        python_callable = INSERT_UM_RANK,
+        task_id='INSERT_UM_RANK',
+        python_callable=INSERT_UM_RANK,
         outlets={
             "datasets": [
                 Dataset("mysql", "U_MULTIRANK_RANKING.UM_RANK")

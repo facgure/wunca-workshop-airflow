@@ -1,0 +1,4 @@
+.env
+dags/*
+logs/*
+plugins/*
