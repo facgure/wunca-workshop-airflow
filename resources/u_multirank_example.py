@@ -3,8 +3,7 @@ import urllib
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow import Dataset
-from airflow.hooks.mysql_hook import MySqlHook
+from airflow.providers.mysql.hooks.mysql import MySqlHook
 from airflow.operators.python import PythonOperator
 
 
@@ -387,57 +386,35 @@ with DAG(
     dag_id='U_MULTIRANK',
     default_args=default_args,
     start_date=datetime(2023, 1, 1),
-    schedule_interval=None,  # '0 10 1 */3 *'
-    tags=['umultirank', 'ranking']
+    schedule=None,  # '0 10 1 */3 *'
+    tags=['umultirank', 'ranking'],
+    catchup=False
 ) as dag:
 
     task1 = PythonOperator(
         task_id='GET_UNIV_FROM_UM',
-        python_callable=GET_UNIV_FROM_UM,
-        inlets={
-            "datasets": [
-                Dataset("Website", "U-Multirank")
-            ]}
+        python_callable=GET_UNIV_FROM_UM
     )
 
     task2 = PythonOperator(
         task_id='GET_INDICATOR_FROM_UM',
         python_callable=GET_INDICATOR_FROM_UM,
-        op_kwargs={'EXEC_DATE': '{{ ds }}'},
-        inlets={
-            "datasets": [
-                Dataset("Website", "U-Multirank")
-            ]}
+        op_kwargs={'EXEC_DATE': '{{ ds }}'}
     )
 
     task3 = PythonOperator(
         task_id='INSERT_UM_UNIVERSTY',
-        python_callable=INSERT_UM_UNIVERSTY,
-        outlets={
-            "datasets": [
-                Dataset("mysql", "U_MULTIRANK_RANKING.UM_UNIVERSITY"),
-            ]}
+        python_callable=INSERT_UM_UNIVERSTY
     )
 
     task4 = PythonOperator(
         task_id='INSERT_UM_INDICATOR',
-        python_callable=INSERT_UM_INDICATOR,
-        outlets={
-            "datasets": [
-                Dataset("mysql", "U_MULTIRANK_RANKING.UM_MAJOR"),
-                Dataset("mysql", "U_MULTIRANK_RANKING.UM_SUBJECT"),
-                Dataset("mysql", "U_MULTIRANK_RANKING.UM_INDICATOR"),
-                Dataset("mysql", "U_MULTIRANK_RANKING.UM_SUB_INDICATOR")
-            ]}
+        python_callable=INSERT_UM_INDICATOR
     )
 
     task5 = PythonOperator(
         task_id='INSERT_UM_RANK',
-        python_callable=INSERT_UM_RANK,
-        outlets={
-            "datasets": [
-                Dataset("mysql", "U_MULTIRANK_RANKING.UM_RANK")
-            ]}
+        python_callable=INSERT_UM_RANK
     )
 
     task1 >> [task2, task3] >> task4 >> task5
