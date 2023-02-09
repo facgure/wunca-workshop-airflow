@@ -35,6 +35,7 @@ def GET_UNIV_FROM_UM(ti=None):
     data_uni = json.loads(html)
     list_datauni = []
     list_id = []
+    thai_id = []
     # data of university
     for i in data_uni['unis']:
         data = {'uid': i['id'],
@@ -51,13 +52,16 @@ def GET_UNIV_FROM_UM(ti=None):
                 'profile': i['profile']}
         list_datauni.append(tuple(data.values()))
         list_id.append(i['id'])
+        if data['country'] == 'Thailand':
+            thai_id.append(i['id'])
 
+    ti.xcom_push(key='thai_id', value=thai_id)
     ti.xcom_push(key='university', value=list_datauni)
     ti.xcom_push(key='id', value=list_id)
 
 
 def prepare_data(dt, id, title_table, sub_table, fact_table, subject_ranking, major):
-    url = "https://www.umultirank.org/json/uniData.json?id="+str(id)
+    url = "http://www.umultirank.org/json/uniData.json?id="+str(id)
     request = urllib.request.urlopen(url)
     html = request.read().decode("utf8")
     data_uni = json.loads(html)
@@ -206,7 +210,7 @@ def del_duplicate_list(list_i):
 
 def GET_INDICATOR_FROM_UM(EXEC_DATE, ti=None):
     dt = EXEC_DATE
-    university_id = ti.xcom_pull(task_ids='GET_UNIV_FROM_UM', key='id')
+    university_id = ti.xcom_pull(task_ids='GET_UNIV_FROM_UM', key='thai_id')
     title_table = []
     sub_table = []
     fact_table = []
